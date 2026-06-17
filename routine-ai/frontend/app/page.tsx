@@ -22,16 +22,21 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const data = await api.get("/routines?today=true");
-    setRoutines(data);
+    try {
+      const data = await api.get("/routines?today=true");
+      setRoutines(data);
 
-    const streakResults = await Promise.all(
-      data.map((r: Routine) =>
-        api.get(`/routines/${r.id}/streak`).then((s: { streak: number }) => [r.id, s.streak])
-      )
-    );
-    setStreaks(Object.fromEntries(streakResults));
-    setLoading(false);
+      const streakResults = await Promise.all(
+        data.map((r: Routine) =>
+          api.get(`/routines/${r.id}/streak`).then((s: { streak: number }) => [r.id, s.streak])
+        )
+      );
+      setStreaks(Object.fromEntries(streakResults));
+    } catch (e) {
+      console.error("Failed to load routines:", e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
