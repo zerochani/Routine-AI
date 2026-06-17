@@ -9,19 +9,32 @@ interface Message {
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+const STORAGE_KEY = "chat_messages";
+const INITIAL_MESSAGE: Message = {
+  role: "assistant",
+  content: "안녕하세요! 루틴을 추가하거나 삭제하려면 말씀해주세요.\n예: \"매일 아침 7시에 운동 30분 추가해줘\"",
+};
+
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "안녕하세요! 루틴을 추가하거나 삭제하려면 말씀해주세요.\n예: \"매일 아침 7시에 운동 30분 추가해줘\"",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === "undefined") return [INITIAL_MESSAGE];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [INITIAL_MESSAGE];
+    } catch {
+      return [INITIAL_MESSAGE];
+    }
+  });
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
   }, [messages]);
 
   const send = async () => {
