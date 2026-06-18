@@ -18,6 +18,12 @@ class ChatRequest(BaseModel):
     messages: List[Message]
 
 
+def _clean(s) -> str:
+    if not s:
+        return ""
+    return str(s).encode("utf-8", errors="ignore").decode("utf-8")
+
+
 async def process_action(action_data: dict):
     """Claude가 반환한 action JSON을 실제 DB 작업으로 처리"""
     action = action_data.get("action")
@@ -25,10 +31,10 @@ async def process_action(action_data: dict):
         async with get_db() as db:
             await db.execute(
                 "INSERT INTO routines (name, description, time, repeat_type) VALUES ($1, $2, $3, $4)",
-                action_data.get("name", ""),
-                action_data.get("description", ""),
-                action_data.get("time", "09:00"),
-                action_data.get("repeat", "daily"),
+                _clean(action_data.get("name")),
+                _clean(action_data.get("description")),
+                _clean(action_data.get("time")) or "09:00",
+                _clean(action_data.get("repeat")) or "daily",
             )
     elif action == "delete":
         name = action_data.get("name", "")
