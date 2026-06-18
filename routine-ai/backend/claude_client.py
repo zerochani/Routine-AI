@@ -14,6 +14,7 @@ SYSTEM_PROMPT = """너는 루틴 관리 개인 비서야. 사용자가 하루에
 - 조회: {"action":"list"}
 - 없으면: {"action":"none"}
 
+중요: JSON의 name, description 값은 반드시 사용자가 말한 한국어 그대로 써줘. 유니코드 이스케이프(\uXXXX) 없이 실제 한글로 작성해.
 그 다음 줄부터 사용자에게 보낼 자연스러운 한국어 확인 메시지를 써줘.
 알림 메시지는 간결한 코치 스타일로: "운동. 지금 바로." 같은 형태.
 시간이 명확하지 않으면 반드시 물어봐.
@@ -49,6 +50,7 @@ async def stream_chat_async(messages: list):
         model=MODEL,
         messages=groq_messages,
         stream=True,
+        temperature=0,
     )
 
     async for chunk in stream:
