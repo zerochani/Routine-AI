@@ -4,7 +4,7 @@ from groq import Groq, AsyncGroq
 _client = Groq(api_key=os.getenv("GROQ_API_KEY", ""))
 _async_client = AsyncGroq(api_key=os.getenv("GROQ_API_KEY", ""))
 
-MODEL = "llama-3.3-70b-versatile"
+MODEL = "gemma2-9b-it"
 
 SYSTEM_PROMPT = """너는 루틴 관리 개인 비서야. 사용자가 하루에 해야 할 루틴을 관리하도록 도와줘.
 
