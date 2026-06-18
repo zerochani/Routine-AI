@@ -61,7 +61,12 @@ async def chat(request: ChatRequest):
         try:
             action_data = json.loads(first_line)
             if action_data.get("action") not in (None, "none", "list"):
-                await process_action(action_data)
+                try:
+                    await process_action(action_data)
+                except Exception as e:
+                    import traceback
+                    print(f"[process_action error] {e}")
+                    traceback.print_exc()
             yield f"data: {json.dumps({'action': action_data})}\n\n"
         except (json.JSONDecodeError, ValueError):
             pass
