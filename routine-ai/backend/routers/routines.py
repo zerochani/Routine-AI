@@ -1,8 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional
-from datetime import date
-import aiosqlite
+from datetime import date, timedelta
 from db import get_db
 
 router = APIRouter(prefix="/routines", tags=["routines"])
@@ -11,8 +10,8 @@ router = APIRouter(prefix="/routines", tags=["routines"])
 class RoutineCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    time: str  # "HH:MM"
-    repeat_type: str = "daily"  # daily | weekdays | weekends
+    time: str
+    repeat_type: str = "daily"
 
 
 class RoutineUpdate(BaseModel):
@@ -22,68 +21,64 @@ class RoutineUpdate(BaseModel):
 @router.get("")
 async def list_routines(today: bool = False):
     async with get_db() as db:
-        db.row_factory = aiosqlite.Row
         if today:
             today_str = date.today().isoformat()
-            weekday = date.today().weekday()  # 0=Mon, 6=Sun
-            is_weekend = weekday >= 5
-            repeat_filter = "active = 1 AND (repeat_type = 'daily' OR (repeat_type = 'weekdays' AND ? = 0) OR (repeat_type = 'weekends' AND ? = 1))"
-            async with db.execute(
-                f"SELECT r.*, c.status as completion_status FROM routines r LEFT JOIN completions c ON r.id = c.routine_id AND c.date = ? WHERE {repeat_filter}",
-                (today_str, int(is_weekend), int(is_weekend))
-            ) as cursor:
-                rows = await cursor.fetchall()
+            is_weekend = int(date.today().weekday() >= 5)
+            rows = await db.fetch(
+                """SELECT r.*, c.status as completion_status
+                   FROM routines r
+                   LEFT JOIN completions c ON r.id = c.routine_id AND c.date = $1
+                   WHERE r.active = 1 AND (
+                     r.repeat_type = 'daily'
+                     OR (r.repeat_type = 'weekdays' AND $2 = 0)
+                     OR (r.repeat_type = 'weekends' AND $2 = 1)
+                   )""",
+                today_str, is_weekend
+            )
         else:
-            async with db.execute("SELECT * FROM routines ORDER BY time") as cursor:
-                rows = await cursor.fetchall()
+            rows = await db.fetch("SELECT * FROM routines ORDER BY time")
         return [dict(r) for r in rows]
 
 
 @router.post("")
 async def create_routine(routine: RoutineCreate):
     async with get_db() as db:
-        cursor = await db.execute(
-            "INSERT INTO routines (name, description, time, repeat_type) VALUES (?, ?, ?, ?)",
-            (routine.name, routine.description, routine.time, routine.repeat_type)
+        row = await db.fetchrow(
+            "INSERT INTO routines (name, description, time, repeat_type) VALUES ($1, $2, $3, $4) RETURNING id",
+            routine.name, routine.description, routine.time, routine.repeat_type
         )
-        await db.commit()
-        return {"id": cursor.lastrowid, **routine.model_dump()}
+        return {"id": row["id"], **routine.model_dump()}
 
 
 @router.patch("/{routine_id}")
 async def update_routine(routine_id: int, update: RoutineUpdate):
     async with get_db() as db:
         await db.execute(
-            "UPDATE routines SET active = ? WHERE id = ?",
-            (int(update.active), routine_id)
+            "UPDATE routines SET active = $1 WHERE id = $2",
+            int(update.active), routine_id
         )
-        await db.commit()
         return {"id": routine_id, "active": update.active}
 
 
 @router.delete("/{routine_id}")
 async def delete_routine(routine_id: int):
     async with get_db() as db:
-        await db.execute("DELETE FROM completions WHERE routine_id = ?", (routine_id,))
-        await db.execute("DELETE FROM routines WHERE id = ?", (routine_id,))
-        await db.commit()
+        await db.execute("DELETE FROM completions WHERE routine_id = $1", routine_id)
+        await db.execute("DELETE FROM routines WHERE id = $1", routine_id)
         return {"deleted": routine_id}
 
 
 @router.get("/{routine_id}/streak")
 async def get_streak(routine_id: int):
     async with get_db() as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT date, status FROM completions WHERE routine_id = ? AND status = 'done' ORDER BY date DESC",
-            (routine_id,)
-        ) as cursor:
-            rows = await cursor.fetchall()
+        rows = await db.fetch(
+            "SELECT date, status FROM completions WHERE routine_id = $1 AND status = 'done' ORDER BY date DESC",
+            routine_id
+        )
 
     if not rows:
         return {"streak": 0}
 
-    from datetime import timedelta
     streak = 0
     check = date.today()
     for row in rows:

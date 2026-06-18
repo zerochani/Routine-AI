@@ -1,11 +1,9 @@
 import asyncio
 import os
-from datetime import datetime, date
+from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from claude_client import generate_notification_message
-import aiosqlite
-
-DB_PATH = os.getenv("DB_PATH", "routine.db")
+from db import get_db
 
 
 def _run_async(coro):
@@ -19,31 +17,24 @@ def _run_async(coro):
 async def _check_and_send():
     now = datetime.now()
     current_time = now.strftime("%H:%M")
-    weekday = now.weekday()  # 0=Mon, 6=Sun
-    is_weekend = weekday >= 5
+    is_weekend = int(now.weekday() >= 5)
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-
-        # 이 시간에 발송해야 할 루틴 조회
-        async with db.execute(
+    async with get_db() as db:
+        routines = await db.fetch(
             """SELECT * FROM routines
-               WHERE active = 1 AND time = ?
+               WHERE active = 1 AND time = $1
                AND (
                  repeat_type = 'daily'
-                 OR (repeat_type = 'weekdays' AND ? = 0)
-                 OR (repeat_type = 'weekends' AND ? = 1)
+                 OR (repeat_type = 'weekdays' AND $2 = 0)
+                 OR (repeat_type = 'weekends' AND $2 = 1)
                )""",
-            (current_time, int(is_weekend), int(is_weekend))
-        ) as cursor:
-            routines = await cursor.fetchall()
+            current_time, is_weekend
+        )
 
         if not routines:
             return
 
-        # 구독 목록 조회
-        async with db.execute("SELECT * FROM push_subscriptions") as cursor:
-            subscriptions = await cursor.fetchall()
+        subscriptions = await db.fetch("SELECT * FROM push_subscriptions")
 
         if not subscriptions:
             return
@@ -58,12 +49,11 @@ async def _check_and_send():
 
 async def _send_push_to_all(subscriptions, title: str, body: str):
     import json
+    import base64
     from pywebpush import webpush, WebPushException
 
     vapid_private = os.getenv("VAPID_PRIVATE_KEY", "")
     vapid_claims = {"sub": os.getenv("VAPID_CLAIMS_EMAIL", "mailto:admin@example.com")}
-
-    import base64
     private_key_pem = base64.urlsafe_b64decode(vapid_private + "==").decode("utf-8")
 
     for sub in subscriptions:

@@ -1,39 +1,53 @@
-import aiosqlite
 import os
+import asyncpg
+from contextlib import asynccontextmanager
 
-DB_PATH = os.getenv("DB_PATH", "routine.db")
+_pool = None
 
 
-def get_db():
-    return aiosqlite.connect(DB_PATH)
+async def _get_pool() -> asyncpg.Pool:
+    global _pool
+    if _pool is None:
+        url = os.getenv("DATABASE_URL", "")
+        url = url.replace("postgres://", "postgresql://", 1)
+        _pool = await asyncpg.create_pool(url)
+    return _pool
+
+
+@asynccontextmanager
+async def get_db():
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        yield conn
 
 
 async def init_db():
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("""
+    pool = await _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS routines (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                name        TEXT NOT NULL,
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
                 description TEXT,
-                time        TEXT NOT NULL,
+                time TEXT NOT NULL,
                 repeat_type TEXT NOT NULL DEFAULT 'daily',
-                active      INTEGER NOT NULL DEFAULT 1
+                active INTEGER NOT NULL DEFAULT 1
             )
         """)
-        await db.execute("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS completions (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 routine_id INTEGER NOT NULL REFERENCES routines(id),
-                date       TEXT NOT NULL,
-                status     TEXT NOT NULL
+                date TEXT NOT NULL,
+                status TEXT NOT NULL,
+                UNIQUE(routine_id, date)
             )
         """)
-        await db.execute("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS push_subscriptions (
-                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 endpoint TEXT UNIQUE NOT NULL,
-                p256dh   TEXT NOT NULL,
-                auth     TEXT NOT NULL
+                p256dh TEXT NOT NULL,
+                auth TEXT NOT NULL
             )
         """)
-        await db.commit()

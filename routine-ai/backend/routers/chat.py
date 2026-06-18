@@ -24,23 +24,19 @@ async def process_action(action_data: dict):
     if action == "add":
         async with get_db() as db:
             await db.execute(
-                "INSERT INTO routines (name, description, time, repeat_type) VALUES (?, ?, ?, ?)",
-                (
-                    action_data.get("name", ""),
-                    action_data.get("description", ""),
-                    action_data.get("time", "09:00"),
-                    action_data.get("repeat", "daily"),
-                )
+                "INSERT INTO routines (name, description, time, repeat_type) VALUES ($1, $2, $3, $4)",
+                action_data.get("name", ""),
+                action_data.get("description", ""),
+                action_data.get("time", "09:00"),
+                action_data.get("repeat", "daily"),
             )
-            await db.commit()
     elif action == "delete":
         name = action_data.get("name", "")
         async with get_db() as db:
             await db.execute(
-                "UPDATE routines SET active = 0 WHERE name LIKE ?",
-                (f"%{name}%",)
+                "UPDATE routines SET active = 0 WHERE name ILIKE $1",
+                f"%{name}%"
             )
-            await db.commit()
 
 
 @router.post("")

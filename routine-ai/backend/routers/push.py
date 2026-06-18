@@ -23,11 +23,10 @@ async def get_vapid_public_key():
 async def subscribe(sub: PushSubscription):
     async with get_db() as db:
         await db.execute(
-            """INSERT OR REPLACE INTO push_subscriptions (endpoint, p256dh, auth)
-               VALUES (?, ?, ?)""",
-            (sub.endpoint, sub.p256dh, sub.auth)
+            """INSERT INTO push_subscriptions (endpoint, p256dh, auth) VALUES ($1, $2, $3)
+               ON CONFLICT (endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth""",
+            sub.endpoint, sub.p256dh, sub.auth
         )
-        await db.commit()
     return {"subscribed": True}
 
 
@@ -35,8 +34,7 @@ async def subscribe(sub: PushSubscription):
 async def unsubscribe(sub: PushSubscription):
     async with get_db() as db:
         await db.execute(
-            "DELETE FROM push_subscriptions WHERE endpoint = ?",
-            (sub.endpoint,)
+            "DELETE FROM push_subscriptions WHERE endpoint = $1",
+            sub.endpoint
         )
-        await db.commit()
     return {"unsubscribed": True}
