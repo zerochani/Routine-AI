@@ -82,12 +82,17 @@ export default function ChatPage() {
             const data = JSON.parse(payload);
             if (data.delta) {
               fullText += data.delta;
-              // 첫 줄(JSON action)은 화면에 표시하지 않음
-              const displayText = firstLine
-                ? fullText.includes("\n")
-                  ? (firstLine = false, fullText.slice(fullText.indexOf("\n") + 1))
-                  : ""
-                : fullText.slice(fullText.indexOf("\n") + 1);
+              const newlineIdx = fullText.indexOf("\n");
+              let displayText: string;
+              if (newlineIdx === -1) {
+                // 첫 줄 완성 전: JSON이면 숨김
+                try { JSON.parse(fullText.trim()); displayText = ""; }
+                catch { displayText = fullText; }
+              } else {
+                // 첫 줄 완성: JSON이면 제거
+                try { JSON.parse(fullText.slice(0, newlineIdx).trim()); displayText = fullText.slice(newlineIdx + 1); }
+                catch { displayText = fullText; }
+              }
 
               setMessages((prev) => {
                 const updated = [...prev];
